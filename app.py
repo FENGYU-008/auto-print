@@ -7,7 +7,7 @@ from flask import Flask, request
 from flask_cors import CORS
 from werkzeug.utils import secure_filename
 from werkzeug.datastructures import FileStorage
-from PyPDF2 import PdfReader
+from PyPDF2 import PdfReader, PdfWriter
 from pypinyin import lazy_pinyin
 
 app = Flask(__name__)
@@ -99,12 +99,60 @@ class PDFDocument(Document):
     def pages(self) -> int:
         if self._pages is None:
             reader = PdfReader(self.absPath)
-            if reader.is_encrypted:
-                reader.decrypt('')
             self._pages = len(reader.pages)
         return self._pages
 
-    def dprint(self, options: dict = None):
+    def add_to_printer(self, options: dict = None):
+        args = PrinterUtil.trans_options(options)
+        cmd = os.path.abspath('SumatraPDF.exe') + ' ' + args + ' ' + self.absPath
+        os.system(cmd)
+        return PrinterUtil.get_job_id_by_document(PrinterUtil.get_default_printer(), self.filename)
+
+    def strict_add_to_printer(self, options: dict = None):
+        lst = options['pages'].split(',')
+        pages = []
+        for r in lst:
+            temp = r.split('-')
+            if len(temp) == 2:
+                pages.extend([n for n in range(int(temp[0]), int(temp[1]) + 1)])
+            elif len(temp) == 1:
+                pages.append(int(temp[0]))
+        pages = set(pages)
+        reader = PdfReader(self.absPath)
+        writer = PdfWriter()
+        for index in pages:
+            writer.add_page(reader.pages[index - 1])
+        if options['side'] == 'duplex' and len(pages) & 1:
+            writer.add_blank_page()
+
+        new_filename = os.path.splitext(self.filename)[0] + '_output' + self.extension
+        output = os.path.join(app.config['UPLOAD_FOLDER'], new_filename)
+        with open(output, 'wb') as f:
+            writer.write(f)
+        del options['pages']
+        args = PrinterUtil.trans_options(options)
+        cmd = os.path.abspath('SumatraPDF.exe') + ' ' + args + ' ' + output
+        os.system(cmd)
+        return PrinterUtil.get_job_id_by_document(PrinterUtil.get_default_printer(), new_filename)
+
+
+class PrinterUtil(object):
+    @staticmethod
+    def trans_job_info(job_info):
+        ret = {
+            'jobId': job_info['JobId'],
+            'printerName': job_info['pPrinterName'],
+            'document': job_info['pDocument'],
+            'status': job_info['Status'],
+            'priority': job_info['Priority'],
+            'position': job_info['Position'],
+            'totalPages': job_info['TotalPages'],
+            'pagesPrinted': job_info['PagesPrinted']
+        }
+        return ret
+
+    @staticmethod
+    def trans_options(options):
         args = ''
         if options is None:
             args += '-print-to-default -silent '
@@ -129,25 +177,7 @@ class PDFDocument(Document):
                 args += 'paper=' + options['paperSize'] + ','
             if 'copies' in options:
                 args += str(options['copies']) + 'x,'
-
-        cmd = os.path.abspath('SumatraPDF.exe') + ' ' + args[:-1] + ' ' + self.absPath
-        os.system(cmd)
-
-
-class PrinterUtil(object):
-    @staticmethod
-    def trans_job_info(job_info):
-        ret = {
-            'jobId': job_info['JobId'],
-            'printerName': job_info['pPrinterName'],
-            'document': job_info['pDocument'],
-            'status': job_info['Status'],
-            'priority': job_info['Priority'],
-            'position': job_info['Position'],
-            'totalPages': job_info['TotalPages'],
-            'pagesPrinted': job_info['PagesPrinted']
-        }
-        return ret
+        return args[:-1]
 
     @staticmethod
     def get_default_printer() -> str:
@@ -173,6 +203,16 @@ class PrinterUtil(object):
         job_info = win32print.GetJob(handle, job_id)
         win32print.ClosePrinter(handle)
         return PrinterUtil.trans_job_info(job_info)
+
+    @staticmethod
+    def get_job_id_by_document(printer: str, document: str) -> int:
+        jobs = PrinterUtil.enum_jobs(printer)
+        job_id = None
+        for job in jobs:
+            if os.path.basename(job['document']) == document:
+                job_id = job['jobId']
+                break
+        return job_id
 
 
 @app.route('/uploader', methods=['GET', 'POST'])
@@ -218,12 +258,10 @@ def get_job():
 def print_document():
     data = request.get_json()
     pdf = PDFDocument(data['filename'])
-    pdf.dprint(data['options'])
-    jobs = PrinterUtil.enum_jobs(PrinterUtil.get_default_printer())
-    job_id = None
-    for job in jobs:
-        if os.path.basename(job['document']) == pdf.filename:
-            job_id = job['jobId']
+    if data['options']['side'] == 'simplex':
+        job_id = pdf.add_to_printer(data['options'])
+    else:
+        job_id = pdf.strict_add_to_printer(data['options'])
     return {
         'jobID': job_id
     }
