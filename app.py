@@ -11,7 +11,7 @@ from PyPDF2 import PdfReader, PdfWriter
 from pypinyin import lazy_pinyin
 
 app = Flask(__name__)
-app.config["JSON_AS_ASCII"] = False  # 支持中文
+app.config['JSON_AS_ASCII'] = False  # 支持中文
 app.config['UPLOAD_FOLDER'] = os.path.abspath('static/files')
 CORS(app, supports_credentials=True)
 
@@ -103,7 +103,7 @@ class PDFDocument(Document):
         return self._pages
 
     def add_to_printer(self, options: dict = None):
-        args = PrinterUtil.trans_options(options)
+        args = PrinterUtil.parse_options(options)
         cmd = os.path.abspath('SumatraPDF.exe') + ' ' + args + ' ' + self.absPath
         os.system(cmd)
         return PrinterUtil.get_job_id_by_document(PrinterUtil.get_default_printer(), self.filename)
@@ -130,7 +130,7 @@ class PDFDocument(Document):
         with open(output, 'wb') as f:
             writer.write(f)
         del options['pages']
-        args = PrinterUtil.trans_options(options)
+        args = PrinterUtil.parse_options(options)
         cmd = os.path.abspath('SumatraPDF.exe') + ' ' + args + ' ' + output
         os.system(cmd)
         return PrinterUtil.get_job_id_by_document(PrinterUtil.get_default_printer(), new_filename)
@@ -152,7 +152,7 @@ class PrinterUtil(object):
         return ret
 
     @staticmethod
-    def trans_options(options):
+    def parse_options(options):
         args = ''
         if options is None:
             args += '-print-to-default -silent '
