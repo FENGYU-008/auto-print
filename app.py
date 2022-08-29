@@ -87,7 +87,7 @@ class Document(object):
             im_1 = image_1.convert('RGB')
             im_1.save(out_path)
 
-        return out_path
+        return os.path.basename(out_path)
 
 
 class PDFDocument(Document):
