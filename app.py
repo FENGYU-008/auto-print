@@ -105,6 +105,7 @@ class PDFDocument(Document):
     def add_to_printer(self, options: dict = None):
         args = PrinterUtil.parse_options(options)
         cmd = os.path.abspath('SumatraPDF.exe') + ' ' + args + ' ' + self.absPath
+        print(cmd)
         os.system(cmd)
         return PrinterUtil.get_job_id_by_document(PrinterUtil.get_default_printer(), self.filename)
 
@@ -251,7 +252,13 @@ def enum_jobs():
 @app.route('/get_job')
 def get_job():
     job_id = int(request.args.get('jobID'))
-    return PrinterUtil.get_job(PrinterUtil.get_default_printer(), job_id)
+    try:
+        ret = PrinterUtil.get_job(PrinterUtil.get_default_printer(), job_id)
+    except Exception:
+        ret = {
+            "status": -5
+        }
+    return ret
 
 
 @app.route('/print', methods=['post'])
