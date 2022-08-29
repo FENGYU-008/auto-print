@@ -9,6 +9,7 @@ from werkzeug.utils import secure_filename
 from werkzeug.datastructures import FileStorage
 from PyPDF2 import PdfReader, PdfWriter
 from pypinyin import lazy_pinyin
+from PIL import Image
 
 app = Flask(__name__)
 app.config['JSON_AS_ASCII'] = False  # 支持中文
@@ -56,12 +57,6 @@ class Document(object):
         self.absPath = os.path.join(app.config['UPLOAD_FOLDER'], self.filename)
 
     @property
-    def pages(self) -> int:
-        if self._pages is None:
-            self._pages = ...
-        return self._pages
-
-    @property
     def size(self) -> str:
         if self._size is None:
             st_size = os.stat(self.absPath).st_size
@@ -72,23 +67,27 @@ class Document(object):
         return self._size
 
     def convert2pdf(self) -> str:
+        in_path = self.absPath
+        out_path = os.path.splitext(self.absPath)[0] + '.pdf'
+
         if self.extension == '.pdf':
             return self.filename
         if self.extension in ['.doc', '.docx']:
-            word_path = self.absPath
-            pdf_path = os.path.splitext(self.absPath)[0] + '.pdf'
-
             # Initialize
             pythoncom.CoInitialize()
             word = win32com.client.DispatchEx('Word.Application')
-            doc = word.Documents.Open(word_path)
-            doc.SaveAs(pdf_path, FileFormat=17)
+            doc = word.Documents.Open(in_path)
+            doc.SaveAs(out_path, FileFormat=17)
             doc.Close()
             word.Quit()
             # Uninitialize
             pythoncom.CoUninitialize()
+        if self.extension in ['.jpg']:
+            image_1 = Image.open(in_path)
+            im_1 = image_1.convert('RGB')
+            im_1.save(out_path)
 
-        return os.path.splitext(self.filename)[0] + '.pdf'
+        return out_path
 
 
 class PDFDocument(Document):

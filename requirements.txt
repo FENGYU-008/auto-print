@@ -4,3 +4,4 @@ Flask-Cors==3.0.10
 Werkzeug==2.2.1
 PyPDF2==2.9.0
 pypinyin==0.47.0
+Pillow~=9.2.0
