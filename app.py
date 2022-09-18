@@ -82,7 +82,7 @@ class Document(object):
             word.Quit()
             # Uninitialize
             pythoncom.CoUninitialize()
-        if self.extension in ['.jpg']:
+        if self.extension in ['.jpg', '.jpeg', '.png']:
             image_1 = Image.open(in_path)
             im_1 = image_1.convert('RGB')
             im_1.save(out_path)
@@ -251,12 +251,7 @@ def enum_jobs():
 @app.route('/get_job')
 def get_job():
     job_id = int(request.args.get('jobID'))
-    try:
-        ret = PrinterUtil.get_job(PrinterUtil.get_default_printer(), job_id)
-    except Exception:
-        ret = {
-            "status": -5
-        }
+    ret = PrinterUtil.get_job(PrinterUtil.get_default_printer(), job_id)
     return ret
 
 
