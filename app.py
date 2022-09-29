@@ -1,6 +1,7 @@
 import os
 
 import pythoncom
+import win32api
 import win32print
 import win32com.client
 from flask import Flask, request
@@ -102,10 +103,13 @@ class PDFDocument(Document):
         return self._pages
 
     def add_to_printer(self, options: dict = None):
-        args = PrinterUtil.parse_options(options)
-        cmd = os.path.abspath('SumatraPDF.exe') + ' ' + args + ' ' + self.absPath
-        print(cmd)
-        os.system(cmd)
+        if options is None:
+            win32api.ShellExecute(0, "print", self.absPath, '/d:"%s"' % win32print.GetDefaultPrinter(), ".", 0)
+        else:
+            args = PrinterUtil.parse_options(options)
+            cmd = os.path.abspath('SumatraPDF.exe') + ' ' + args + ' ' + self.absPath
+            print(cmd)
+            os.system(cmd)
         return PrinterUtil.get_job_id_by_document(PrinterUtil.get_default_printer(), self.filename)
 
     def strict_add_to_printer(self, options: dict = None):
@@ -215,6 +219,20 @@ class PrinterUtil(object):
         return job_id
 
 
+def merge_pdf(pdf_list: list[PDFDocument]):
+    writer = PdfWriter()
+    for pdf in pdf_list:
+        reader = PdfReader(pdf.absPath)
+        for page in reader.pages:
+            writer.add_page(page)
+
+    new_filename = UploadFile.make_filename_unique('merged.pdf')
+    output = os.path.join(app.config['UPLOAD_FOLDER'], new_filename)
+    with open(output, 'wb') as f:
+        writer.write(f)
+    return new_filename
+
+
 @app.route('/uploader', methods=['GET', 'POST'])
 def uploader():
     if request.method == 'POST':
@@ -258,11 +276,15 @@ def get_job():
 @app.route('/print', methods=['post'])
 def print_document():
     data = request.get_json()
+    default_arg = request.args.get('defaultArg')
     pdf = PDFDocument(data['filename'])
-    if data['options']['side'] == 'simplex':
-        job_id = pdf.add_to_printer(data['options'])
+    if default_arg == 'true':
+        job_id = pdf.add_to_printer()
     else:
-        job_id = pdf.strict_add_to_printer(data['options'])
+        if data['options']['side'] == 'simplex':
+            job_id = pdf.add_to_printer(data['options'])
+        else:
+            job_id = pdf.strict_add_to_printer(data['options'])
     return {
         'jobID': job_id
     }
